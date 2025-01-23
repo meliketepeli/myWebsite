@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cart Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        nav {
+            background-color: #0056b3;
+            color: white;
+            padding: 25px;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 30px;
+        }
+        .cart-container {
+            padding: 3%;
+        }
+        .cart-item {
+            border-bottom: 1px solid #ccc;
+            padding: 15px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="/products">Products</a>
+    <a href="/cart">Cart</a>
+    <a href="/logout">Logout</a>
+</nav>
+<div class="cart-container">
+    {{range .}}
+    <div class="cart-item">
+        <div>
+            <h3>{{.Name}}</h3>
+            <p>${{.Price}}</p>
+        </div>
+        <div>
+            <p>Quantity: {{.Quantity}}</p>
+        </div>
+    </div>
+    {{end}}
+</div>
+</body>
+</html>

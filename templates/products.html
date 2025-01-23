@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Product Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    nav {
+      background-color: #0056b3;
+      color: white;
+      padding: 25px;
+    }
+    nav a {
+      color: white;
+      text-decoration: none;
+      margin-right: 30px;
+    }
+    .product-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      padding: 3%;
+      margin-left:3%;
+    }
+    .product-card {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 300px;
+      height:300px;
+      text-align: center;
+      padding: 10px;
+      margin:20px;
+    }
+    .product-card img {
+      max-width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <a href="/products">Products</a>
+  <a href="/cart">Cart</a>
+  <a href="/logout">Logout</a>
+</nav>
+<div class="product-container">
+  {{range .}}
+  <div class="product-card">
+    <img src="{{.ImageURL}}" alt="{{.Name}}">
+    <h3>{{.Name}}</h3>
+    <p>{{.Description}}</p>
+    <p><strong>${{.Price}}</strong></p>
+    <a href="/add-to-cart?id={{.ID}}"><button>Add To Cart</button></a>
+  </div>
+  {{end}}
+</div>
+</body>
+</html>
