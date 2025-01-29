@@ -1,3 +1,5 @@
+{{ define "cart" }}
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -30,11 +32,13 @@
     </style>
 </head>
 <body>
+
 <nav>
     <a href="/products">Products</a>
     <a href="/cart">Cart</a>
     <a href="/logout">Logout</a>
 </nav>
+
 <div class="cart-container">
     {{range .}}
     <div class="cart-item">
@@ -50,3 +54,5 @@
 </div>
 </body>
 </html>
+
+{{ end }}
