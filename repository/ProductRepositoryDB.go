@@ -44,6 +44,7 @@ func (p *ProductRepositoryDB) Insert(product models.Product) (bool, error) {
 		errors.New("Failed to insert product")
 		return false, err
 	}
+	log.Println("Başarıyla eklenen ürün:", product)
 	return true, nil
 }
 
@@ -59,8 +60,10 @@ func (p *ProductRepositoryDB) GetAll() ([]models.Product, error) {
 	// açtığım yolu verdim, result a aldıgım dokumanları verdim
 
 	if err != nil {
-		log.Fatalln(err)
+		//log.Fatalln(err)
+		log.Println("MongoDB'den veri alınırken hata oluştu:", err)
 		return nil, err
+
 	}
 
 	// tek tek bu verdiğim dokumanları almam lazım!!!
@@ -68,12 +71,21 @@ func (p *ProductRepositoryDB) GetAll() ([]models.Product, error) {
 	for result.Next(ctx) {
 		// eger documentta decode edebilecegim bir sey varsa decodela, product a ata
 		if err := result.Decode(&product); err != nil {
-			log.Fatalln(err)
+			// log.Fatalln(err)
+			log.Println("Belge decode edilirken hata oluştu:", err)
+			return nil, err
 		}
 		// eger decode gerek yoksa ekle
 		products = append(products, product)
+
+	}
+	// Döngü sonunda, eğer hata varsa onu döndürelim
+	if err := result.Err(); err != nil {
+		log.Println("Döngü sırasında hata oluştu:", err)
 		return nil, err
 	}
+
+	log.Println("Başarıyla alınan ürünler:", products)
 	return products, nil
 }
 

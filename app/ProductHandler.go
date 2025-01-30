@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"log"
 	"net/http"
 	"newProject/models"
 	"newProject/services"
@@ -35,10 +36,16 @@ func (h ProductHandler) GetAllProduct(c *fiber.Ctx) error {
 	result, err := h.Service.ProductGetAll()
 
 	if err != nil {
+		log.Println("Ürünler alınırken hata oluştu:", err)
 		return c.Status(http.StatusInternalServerError).JSON(err.Error())
 	}
 
 	return c.Status(http.StatusOK).JSON(result)
+
+	// Ürünleri HTML şablonuna aktar
+	return c.Render("products.html", fiber.Map{
+		"Products": result,
+	})
 
 }
 

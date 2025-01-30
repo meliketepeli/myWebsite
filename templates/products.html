@@ -1,26 +1,60 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Product Page</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+
 <nav>
   <a href="/products">Products</a>
   <a href="/cart">Cart</a>
   <a href="/logout">Logout</a>
 </nav>
-<div class="product-container">
-  {{range .}}
-  <div class="product-card">
-    <img src="{{.ImageURL}}" alt="{{.Name}}">
-    <h3>{{.Name}}</h3>
-    <p>{{.Description}}</p>
-    <p><strong>Stock: {{.Quantity}}</strong></p>
-    <p><strong>Price: ${{.Price}}</strong></p>
-    <a href="/cart?id={{.ID}}"><button>Add To Cart</button></a>
-  </div>
-  {{end}}
+
+<h1>Ürünler</h1>
+
+<div class="product-container" id="product-container">
+  <!-- Ürünler buraya eklenecek -->
 </div>
+
+<script>
+  window.onload = async function() {
+    try {
+      const response = await fetch('/api/products'); // API çağrısı
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const products = await response.json();
+      console.log("API Response:", products);
+
+      const productContainer = document.getElementById("product-container");
+      productContainer.innerHTML = "";
+
+      products.forEach(product => {
+        const productCard = document.createElement("div");
+        productCard.className = "product-card";
+        productCard.innerHTML = `
+            <img src="${product.image_url}" alt="${product.name}" style="width:150px;height:150px;">
+            <h3>${product.name}</h3>
+            <p>${product.description}</p>
+            <p><strong>Stock: ${product.quantity}</strong></p>
+            <p><strong>Price: $${product.price}</strong></p>
+            <a href="/cart?id=${product.id}"><button>Add To Cart</button></a>
+          `;
+
+        productContainer.appendChild(productCard);
+      });
+
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      document.getElementById("product-container").innerHTML = `<p style="color:red;">Error loading products.</p>`;
+    }
+  }
+</script>
+
 </body>
 </html>
