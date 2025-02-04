@@ -5,9 +5,14 @@ import (
 	"newProject/app" // Burada app paketini import etmelisin
 )
 
-func SetupRoutes(app *fiber.App, pr app.ProductHandler) {
+func SetupRoutes(app *fiber.App, pr app.ProductHandler, us app.UserHandler) {
 
 	app.Get("/api/products", pr.GetAllProduct)
-	app.Post("/api/products", pr.CreateProduct)
+	app.Post("/api/product", pr.CreateProduct)
 	app.Delete("/api/products/:id", pr.DeleteProduct)
+
+	app.Get("/api/users", us.GetAllUser)
+	app.Post("/api/user", us.CreateUser)
+	app.Delete("/api/users/:id", us.DeleteUser)
+
 }

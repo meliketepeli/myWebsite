@@ -4,7 +4,38 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Product Page</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    nav {
+      background-color: #0056b3;
+      color: white;
+      padding: 25px;
+    }
+    nav a {
+      color: white;
+      text-decoration: none;
+      margin-right: 30px;
+    }
+    .product-container {
+      padding: 3%;
+    }
+    .product-card {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin: 10px;
+      display: inline-block;
+      width: 200px;
+      text-align: center;
+    }
+    .product-card img {
+      width: 100%;
+      height: auto;
+    }
+  </style>
 </head>
 <body>
 
@@ -16,45 +47,22 @@
 
 <h1>Ürünler</h1>
 
-<div class="product-container" id="product-container">
-  <!-- Ürünler buraya eklenecek -->
+<div class="product-container">
+  {{ if .Products }}  <!-- Eğer Products varsa -->
+  {{ range .Products }} <!-- Ürünleri döngü ile göster -->
+  <div class="product-card">
+    <img src="{{ .ImageURL }}" alt="{{ .Name }}">
+    <h3>{{ .Name }}</h3>
+    <p>{{ .Description }}</p>
+    <p><strong>Stock: {{ .Quantity }}</strong></p>
+    <p><strong>Price: ${{ .Price }}</strong></p>
+    <a href="/product?id={{ .ID }}"><button>Add To Cart</button></a>
+  </div>
+  {{ end }} <!-- Döngü sonu -->
+  {{ else }}
+  <p style="color:red;">Ürün bulunamadı.</p> <!-- Eğer ürün yoksa bu mesajı göster -->
+  {{ end }}
 </div>
-
-<script>
-  window.onload = async function() {
-    try {
-      const response = await fetch('/api/products'); // API çağrısı
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const products = await response.json();
-      console.log("API Response:", products);
-
-      const productContainer = document.getElementById("product-container");
-      productContainer.innerHTML = "";
-
-      products.forEach(product => {
-        const productCard = document.createElement("div");
-        productCard.className = "product-card";
-        productCard.innerHTML = `
-            <img src="${product.image_url}" alt="${product.name}" style="width:150px;height:150px;">
-            <h3>${product.name}</h3>
-            <p>${product.description}</p>
-            <p><strong>Stock: ${product.quantity}</strong></p>
-            <p><strong>Price: $${product.price}</strong></p>
-            <a href="/cart?id=${product.id}"><button>Add To Cart</button></a>
-          `;
-
-        productContainer.appendChild(productCard);
-      });
-
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      document.getElementById("product-container").innerHTML = `<p style="color:red;">Error loading products.</p>`;
-    }
-  }
-</script>
 
 </body>
 </html>

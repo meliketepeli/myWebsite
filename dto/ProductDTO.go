@@ -1,7 +1,7 @@
 package dto
 
 type ProductDTO struct {
-	Status bool `json:"status,omitempty"`
+	Status bool `bson:"status,omitempty"`
 }
 
 // veri alırken bazılarını almaya ve bazılarını gostermeye yarıyor dto
