@@ -41,9 +41,22 @@
 
 <nav>
   <a href="/products">Products</a>
-  <a href="/cart">Cart</a>
-  <a href="/logout">Logout</a>
+  <a href="/carts">Cart</a>
+  <a href="#" onclick="logout()">Logout</a>
 </nav>
+
+
+<script>
+  function logout() {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/logout';
+
+    document.body.appendChild(form);
+
+    form.submit();
+  }
+</script>
 
 <h1>Products</h1>
 
@@ -56,7 +69,14 @@
     <p>{{ .Description }}</p>
     <p><strong>Stock: {{ .Quantity }}</strong></p>
     <p><strong>Price: ${{ .Price }}</strong></p>
-    <a href="/product?id={{ .ID }}"><button>Add To Cart</button></a>
+
+    <form action="/add-to-cart" method="POST">
+      <input type="hidden" name="name" value="{{ .Name }}">
+      <input type="hidden" name="price" value="{{ .Price }}">
+      <input type="hidden" name="quantity" value="1">
+      <button type="submit">Add To Cart</button>
+    </form>
+
   </div>
   {{ end }}
   {{ else }}

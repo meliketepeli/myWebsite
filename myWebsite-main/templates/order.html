@@ -16,14 +16,12 @@
         nav {
             background-color: #0056b3;
             color: white;
-            padding: 20px;
-            text-align: center;
+            padding: 25px;
         }
         nav a {
             color: white;
             text-decoration: none;
-            margin: 15px;
-            font-size: 18px;
+            margin-right: 30px;
         }
         .orders-container {
             width: 80%;
@@ -58,10 +56,23 @@
 
 <nav>
     <a href="/products">Products</a>
-    <a href="/cart">Cart</a>
-    <a href="/orders">Orders</a>
-    <a href="/logout">Logout</a>
+    <a href="/carts">Cart</a>
+    <a href="#" onclick="logout()">Logout</a>
 </nav>
+
+
+<script>
+    function logout() {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout';
+
+        document.body.appendChild(form);
+
+        form.submit();
+    }
+</script>
+
 
 <div class="orders-container">
     <h2>Your Orders</h2>

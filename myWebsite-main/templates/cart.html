@@ -23,11 +23,17 @@
         .cart-container {
             padding: 3%;
         }
-        .cart-item {
-            border-bottom: 1px solid #ccc;
-            padding: 15px 0;
-            display: flex;
-            justify-content: space-between;
+        .cart-card {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px;
+            display: inline-block;
+            width: 200px;
+            text-align: center;
+        }
+        .cart-card img {
+            width: 100%;
+            height: auto;
         }
     </style>
 </head>
@@ -36,24 +42,42 @@
 <nav>
     <a href="/products">Products</a>
     <a href="/cart">Cart</a>
-    <a href="/logout">Logout</a>
+    <a href="#" onclick="logout()">Logout</a>
 </nav>
 
+
+<script>
+    function logout() {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout';
+
+        document.body.appendChild(form);
+
+        form.submit();
+    }
+</script>
+
 <div class="cart-container">
-    {{ if .Products }}
-    {{ range .Products }}
-    <div class="cart-item">
-        <div>
-            <h3>{{ .Name }}</h3>
-            <p>${{ .Price }}</p>
-        </div>
-        <div>
-            <p>Quantity: {{ .Quantity }}</p>
-        </div>
+    {{ if .Cart }}
+    {{ range .Cart }}
+    <div class="cart-card">
+        <img src="{{ .ImageURL }}" alt="{{ .Name }}">
+        <h3>{{ .Name }}</h3>
+        <p>{{ .Description }}</p>
+        <p><strong>Stock: {{ .Quantity }}</strong></p>
+        <p><strong>Price: ${{ .Price }}</strong></p>
+
+        <form action="/add-to-cart" method="POST">
+            <input type="hidden" name="name" value="{{ .Name }}">
+            <input type="hidden" name="price" value="{{ .Price }}">
+            <input type="hidden" name="quantity" value="1">
+        </form>
+
     </div>
     {{ end }}
     {{ else }}
-    <p>Your cart is empty.</p>
+    <p style="color:red;">Not Found Products Your Card.</p>
     {{ end }}
 </div>
 
