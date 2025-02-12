@@ -8,14 +8,121 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/template/html/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/gridfs"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"io"
 	"log"
 	"newProject/configs"
 	"strconv"
+	"time"
 )
+
+var jwtSecret = []byte("supersecretkey")
+
+func loginHandler(c *fiber.Ctx) error {
+
+	var loginData struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := c.BodyParser(&loginData); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
+	}
+
+	client := configs.DB
+	collection := configs.GetCollection(client, "users")
+
+	var user User
+	err := collection.FindOne(context.TODO(), bson.M{"Username": loginData.Username, "Password": loginData.Password}).Decode(&user)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid username or password"})
+	}
+
+	// JWT Token oluştur
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"username": user.Username,
+		"role":     user.Role,
+		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Token 24 saat geçerli
+	})
+
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate token"})
+	}
+
+	// Kullanıcıya özel cart oluştur veya kontrol et
+	cartCollection := configs.GetCollection(client, "carts")
+	var cart bson.M
+	err = cartCollection.FindOne(context.TODO(), bson.M{"userID": user.Id}).Decode(&cart)
+
+	if err != nil {
+		// Eğer cart yoksa, yeni bir cart oluştur
+		newCart := bson.M{
+			"userID": user.Id,    //ID idi
+			"items":  []bson.M{}, // Boş bir sepet ile başlat
+		}
+		_, err = cartCollection.InsertOne(context.TODO(), newCart)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create cart"})
+		}
+	}
+
+	// Token'ı kullanıcıya döndür
+	return c.JSON(fiber.Map{
+		"token": tokenString,
+		"role":  user.Role,
+	})
+
+	// Kullanıcı rolüne göre yönlendirme yap
+	if user.Role == "user" {
+		return c.Redirect("/products", fiber.StatusSeeOther) // 303 yönlendirme
+	} else if user.Role == "seller" {
+		return c.Redirect("/my-products", fiber.StatusSeeOther)
+	}
+
+	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Unexpected role"})
+}
+
+func JWTMiddleware() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tokenString := c.Get("Authorization")
+
+		if tokenString == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Missing token"})
+		}
+
+		tokenString = tokenString[7:]
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method")
+			}
+			return jwtSecret, nil
+		})
+
+		if err != nil || !token.Valid {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token"})
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token claims"})
+		}
+
+		username, ok := claims["username"].(string)
+		if !ok {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid username in token"})
+		}
+
+		c.Locals("username", username)
+		return c.Next()
+	}
+}
 
 type Product struct {
 	ID          string  `json:"id" bson:"_id"`
@@ -43,12 +150,12 @@ type User struct {
 }
 
 type Cart struct {
-	Id       primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Username string             `json:"username" bson:"Username"`
-	Name     string             `json:"name" bson:"name,omitempty"`
-	Price    float32            `json:"price" bson:"price,omitempty"`
-	Quantity int                `json:"quantity" bson:"quantity,omitempty"`
-
+	Id        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	Username  string             `json:"username" bson:"Username"`
+	Name      string             `json:"name" bson:"name,omitempty"`
+	Price     float32            `json:"price" bson:"price,omitempty"`
+	Quantity  int                `json:"quantity" bson:"quantity,omitempty"`
+	ProductID primitive.ObjectID `json:"product_id" bson:"product_id"`
 	// image url de olsa guzel olur ama image url sıkıntı biraz
 }
 
@@ -138,6 +245,7 @@ func getCartsFromDB() ([]Cart, error) {
 	collection := configs.GetCollection(client, "carts")
 
 	cursor, err := collection.Find(nil, bson.M{})
+
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +278,7 @@ func getOrdersFromDB() ([]Order, error) {
 	return orders, nil
 }
 
-func addToCart(c *fiber.Ctx) error {
+/* func addToCart(c *fiber.Ctx) error {
 	name := c.FormValue("name")
 	priceStr := c.FormValue("price")
 	quantityStr := c.FormValue("quantity")
@@ -209,8 +317,84 @@ func addToCart(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add item to cart"})
 		}
 	}
+	return c.Redirect("/carts")
+}  */
+
+func addToCart(c *fiber.Ctx) error {
+	username, ok := c.Locals("username").(string)
+	log.Printf("Username from locals: %v", username) // Debug için loglama
+
+	if !ok || username == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	productID := c.FormValue("product_id")
+	fmt.Println("Gelen ProductID:", productID)
+
+	oid, err := primitive.ObjectIDFromHex(productID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"error":   "ProductID is not a valid ObjectID format!",
+		})
+	}
+	fmt.Println("GeÇERLİ OBJECT İD:", oid)
+
+	client := configs.DB
+	collection := configs.GetCollection(client, "carts")
+
+	var existingCartItem Cart
+	err = collection.FindOne(context.TODO(), bson.M{"product_id": oid, "Username": username}).Decode(&existingCartItem)
+
+	if err == nil {
+		update := bson.M{"$inc": bson.M{"quantity": 1}}
+		_, err = collection.UpdateOne(nil, bson.M{"product_id": oid}, update)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update cart item"})
+		}
+	} else {
+		newCartItem := Cart{
+			Id:        primitive.NewObjectID(),
+			Name:      c.FormValue("name"),
+			Username:  username,
+			Quantity:  1,
+			ProductID: oid,
+		}
+		_, err = collection.InsertOne(context.TODO(), newCartItem)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add item to cart"})
+		}
+	}
 
 	return c.Redirect("/carts")
+}
+
+func getUserCart(c *fiber.Ctx) error {
+	username := c.Locals("username").(string)
+
+	client := configs.DB
+	collection := configs.GetCollection(client, "carts")
+
+	cursor, err := collection.Find(context.TODO(), bson.M{"Username": username})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch cart items"})
+	}
+	defer cursor.Close(context.TODO())
+
+	var cartItems []Cart
+	if err := cursor.All(context.TODO(), &cartItems); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decode cart items"})
+	}
+
+	return c.JSON(cartItems)
+}
+
+func getCartProducts(c *fiber.Ctx) error {
+	cursor, _ := cartCollection.Find(context.TODO(), bson.M{})
+	var cartItems []bson.M
+	cursor.All(context.TODO(), &cartItems)
+
+	return c.JSON(cartItems)
 }
 
 func removeFromCart(c *fiber.Ctx) error {
@@ -236,7 +420,7 @@ func removeFromCart(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update cart item"})
 		}
 	} else {
-		// bir taneyse sil
+		// bir taneyse direkt sil
 		_, err = collection.DeleteOne(nil, bson.M{"name": name})
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to remove item from cart"})
@@ -333,6 +517,9 @@ func getSellerOrderFromDB() ([]SellerOrder, error) {
 	return sellerorders, nil
 }
 
+var productCollection *mongo.Collection
+var cartCollection *mongo.Collection
+
 func main() {
 
 	engine := html.New("./templates", ".html")
@@ -356,7 +543,7 @@ func main() {
 
 	})
 
-	app.Post("/login", func(c *fiber.Ctx) error {
+	/*	app.Post("/login", func(c *fiber.Ctx) error {
 		var loginData struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
@@ -381,7 +568,12 @@ func main() {
 		}
 
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Unexpected role"})
-	})
+	})   */
+
+	app.Post("/login", loginHandler)
+
+	app.Post("/cart", JWTMiddleware(), addToCart)
+	app.Get("/cart", JWTMiddleware(), getUserCart)
 
 	app.Post("/logout", logoutHandler)
 
@@ -460,7 +652,19 @@ func main() {
 	})
 
 	// fonks olusturup gonderdim.
+	// app.Post("/add-to-cart", addToCart)
+	//
+
+	// MongoDB bağlantısı
+	client, _ := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
+
+	// Koleksiyonları tanımla
+	productCollection = client.Database("ecommerce").Collection("products")
+	cartCollection = client.Database("ecommerce").Collection("cart")
+
+	// Rotalar
 	app.Post("/add-to-cart", addToCart)
+	app.Get("/carts", getCartProducts)
 
 	app.Post("/remove-from-cart", removeFromCart)
 

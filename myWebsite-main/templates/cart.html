@@ -41,7 +41,7 @@
 
 <nav>
     <a href="/products">Products</a>
-    <a href="/cart">Cart</a>
+    <a href="/carts">My Cart</a>
     <a href="#" onclick="logout()">Logout</a>
 </nav>
 
@@ -58,17 +58,40 @@
     }
 </script>
 
+
+<h1>My Cart</h1>
+<ul id="cart-list"></ul>
+
+<script>
+    async function loadCart() {
+        const response = await fetch('/carts');
+        const cartItems = await response.json();
+
+        let cartList = document.getElementById("cart-list");
+        cartList.innerHTML = "";
+
+        cartItems.forEach(item => {
+            let li = document.createElement("li");
+            li.textContent = `Product: ${item.name} - Price: ${item.price}`;
+            cartList.appendChild(li);
+        });
+    }
+
+    window.onload = loadCart;
+</script>
+
+
 <div class="cart-container">
-    {{ if .Cart }}
-    {{ range .Cart }}
+    {{ if .Products }}
+    {{ range .Products }}
     <div class="cart-card">
         <img src="{{ .ImageURL }}" alt="{{ .Name }}">
-        <h3>{{ .Name }}</h3>
-        <p>{{ .Description }}</p>
-        <p><strong>Stock: {{ .Quantity }}</strong></p>
-        <p><strong>Price: ${{ .Price }}</strong></p>
+        <h3>{{ .ProductName }}</h3>
+        <p>{{ .ProductDescription }}</p>
+        <p><strong>Stock: {{ .ProductQuantity }}</strong></p>
+        <p><strong>Price: ${{ .ProductPrice }}</strong></p>
 
-        <form action="/add-to-cart" method="POST">
+        <form action="/carts" method="POST">  <!-- carts yazdım ama -->
             <input type="hidden" name="name" value="{{ .Name }}">
             <input type="hidden" name="price" value="{{ .Price }}">
             <input type="hidden" name="quantity" value="1">
