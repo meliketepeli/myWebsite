@@ -54,7 +54,6 @@ func loginHandler(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid username or password"})
 	}
 
-	// 🍪 Kullanıcı çerezlerini ayarla
 	c.Cookie(&fiber.Cookie{
 		Name:     "userID",
 		Value:    user.ID.Hex(),
@@ -69,7 +68,6 @@ func loginHandler(c *fiber.Ctx) error {
 		HTTPOnly: true,
 	})
 
-	// Kullanıcıyı yönlendir
 	if user.Role == "user" {
 		return c.Redirect("/products?id=" + user.ID.Hex())
 	} else if user.Role == "seller" {
@@ -126,30 +124,24 @@ func JWTMiddleware() fiber.Handler {
 		return c.Next()
 	}
 }
+func logoutHandler(c *fiber.Ctx) error {
+	// 🍪 Çerezleri temizle
+	c.Cookie(&fiber.Cookie{
+		Name:     "userID",
+		Value:    "",
+		Expires:  time.Now().Add(-1 * time.Hour),
+		HTTPOnly: true,
+	})
 
-type Product struct {
-	ID          string  `json:"id" bson:"_id"`
-	Name        string  `json:"name" bson:"name"`
-	Description string  `json:"description" bson:"description"`
-	Price       float64 `json:"price" bson:"price"`
-	Quantity    int     `json:"quantity" bson:"quantity"`
-	ImageURL    string  `json:"imageURL" bson:"imageURL"`
-}
+	c.Cookie(&fiber.Cookie{
+		Name:     "Username",
+		Value:    "",
+		Expires:  time.Now().Add(-1 * time.Hour),
+		HTTPOnly: true,
+	})
 
-type SellerProduct struct {
-	ID          string  `json:"id" bson:"_id"`
-	Name        string  `json:"name" bson:"name"`
-	Description string  `json:"description" bson:"description"`
-	Price       float64 `json:"price" bson:"price"`
-	Quantity    int     `json:"quantity" bson:"quantity"`
-	ImageURL    string  `json:"imageURL" bson:"imageURL"`
-}
-
-type User struct {
-	Id       primitive.ObjectID `json:"id" bson:"_id"`
-	Username string             `json:"username" bson:"Username"`
-	Password string             `json:"password" bson:"Password"`
-	Role     string             `json:"role" bson:"role"`
+	// Kullanıcıyı ana sayfaya yönlendir
+	return c.Redirect("/")
 }
 
 type Cart struct {
@@ -163,107 +155,6 @@ type Cart struct {
 	// image url de olsa guzel olur ama image url sıkıntı biraz
 }
 
-type Order struct {
-	Id       primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Username string             `json:"username" bson:"Username"`
-	Name     string             `json:"name" bson:"name"`
-	Price    float64            `json:"price" bson:"price"`
-	Quantity int                `json:"quantity" bson:"quantity"`
-}
-
-type SellerOrder struct {
-	Id          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Username    string             `json:"username" bson:"Username"`
-	Name        string             `json:"name" bson:"name"`
-	Description string             `json:"description" bson:"description"`
-	Price       float64            `json:"price" bson:"price"`
-	Quantity    int                `json:"quantity" bson:"quantity"`
-
-	//image url koymadım. Bunu bir düşün!
-}
-
-func getProductsFromDB() ([]Product, error) {
-
-	client := configs.DB
-	collection := configs.GetCollection(client, "products")
-
-	cursor, err := collection.Find(nil, bson.M{})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(nil)
-
-	var products []Product
-	if err := cursor.All(nil, &products); err != nil {
-		return nil, err
-	}
-
-	return products, nil
-}
-
-func getSellerProductsFromDB() ([]SellerProduct, error) {
-
-	client := configs.DB
-	collection := configs.GetCollection(client, "seller-products")
-
-	cursor, err := collection.Find(nil, bson.M{})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(context.TODO())
-
-	var products []SellerProduct
-	if err := cursor.All(context.TODO(), &products); err != nil {
-		return nil, err
-	}
-	return products, nil
-}
-
-func getUsersFromDB() ([]User, error) {
-
-	client := configs.DB
-	collection := configs.GetCollection(client, "users")
-
-	cursor, err := collection.Find(nil, bson.M{})
-	if err != nil {
-		log.Println("Error fetching users:", err)
-		return nil, err
-	}
-	defer cursor.Close(nil)
-
-	var users []User
-	if err := cursor.All(nil, &users); err != nil {
-
-		log.Println("Error decoding users:", err)
-
-		return nil, err
-	}
-
-	log.Println("Fetched users:", users)
-	return users, nil
-}
-
-/*
-func getCartsFromDB() ([]Cart, error) {
-
-		client := configs.DB
-		collection := configs.GetCollection(client, "carts")
-
-		cursor, err := collection.Find(nil, bson.M{})
-
-		if err != nil {
-			return nil, err
-		}
-		defer cursor.Close(nil)
-
-		var carts []Cart
-		if err := cursor.All(nil, &carts); err != nil {
-			return nil, err
-		}
-
-		return carts, nil
-	}
-*/
 func getCartsFromDB(userID string) ([]Cart, error) {
 	// userID boş mu kontrol et
 	if userID == "" {
@@ -296,25 +187,28 @@ func getCartsFromDB(userID string) ([]Cart, error) {
 
 	return carts, nil
 }
-func getOrdersFromDB() ([]Order, error) {
 
-	client := configs.DB
-	collection := configs.GetCollection(client, "orders")
+func getCart(c *fiber.Ctx) error {
+	userID := c.Cookies("userID")
+	log.Printf("user id from cookie: %v", userID)
 
-	cursor, err := collection.Find(nil, bson.M{})
+	if userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	// Kullanıcıya ait sepet öğelerini çek
+	carts, err := getCartsFromDB(userID)
 	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(nil)
-
-	var orders []Order
-	if err := cursor.All(nil, &orders); err != nil {
-		return nil, err
+		log.Printf("Failed to fetch cart items: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch cart items"})
 	}
 
-	return orders, nil
+	return c.Render("cart", fiber.Map{
+		"CartItems": carts,
+	})
 }
 
+// sanki buna gerek yoktu ama emin degilim !
 func addToCart(c *fiber.Ctx) error {
 	userID := c.Cookies("userID")
 	log.Printf("user id from cookie: %v", userID)
@@ -381,69 +275,179 @@ func addToCart(c *fiber.Ctx) error {
 	return c.Redirect("/carts?id=" + userID)
 }
 
+type Product struct {
+	ID          string  `json:"id" bson:"_id"`
+	Name        string  `json:"name" bson:"name"`
+	Description string  `json:"description" bson:"description"`
+	Price       float64 `json:"price" bson:"price"`
+	Quantity    int     `json:"quantity" bson:"quantity"`
+	ImageURL    string  `json:"imageURL" bson:"imageURL"`
+}
+
+type SellerProduct struct {
+	ID          string             `json:"id" bson:"_id"`
+	Name        string             `json:"name" bson:"name"`
+	Description string             `json:"description" bson:"description"`
+	Price       float64            `json:"price" bson:"price"`
+	Quantity    int                `json:"quantity" bson:"quantity"`
+	ImageURL    string             `json:"imageURL" bson:"imageURL"`
+	ProductID   primitive.ObjectID `json:"product_id" bson:"product_id"`
+	SellerID    primitive.ObjectID `json:"seller_id" bson:"seller_id"`
+}
+
+type User struct {
+	Id       primitive.ObjectID `json:"id" bson:"_id"`
+	Username string             `json:"username" bson:"Username"`
+	Password string             `json:"password" bson:"Password"`
+	Role     string             `json:"role" bson:"role"`
+}
+
+type Order struct {
+	Id        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	Username  string             `json:"username" bson:"Username"`
+	Name      string             `json:"name" bson:"name"`
+	Price     float64            `json:"price" bson:"price"`
+	Quantity  int                `json:"quantity" bson:"quantity"`
+	ProductID primitive.ObjectID `json:"product_id" bson:"product_id"`
+	UserID    primitive.ObjectID `json:"user_id" bson:"user_id"`
+}
+
 /*
-func getCart(c *fiber.Ctx) error {
-	userID := c.Cookies("userID")
-	log.Printf("user id from cookie: %v", userID)
+	type SellerOrder struct {
+		Id          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+		Username    string             `json:"username" bson:"Username"`
+		Name        string             `json:"name" bson:"name"`
+		Description string             `json:"description" bson:"description"`
+		Price       float64            `json:"price" bson:"price"`
+		Quantity    int                `json:"quantity" bson:"quantity"`
 
+		//image url koymadım. Bunu bir düşün!
+	}
+*/
+type SellerOrder struct {
+	Id          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	Username    string             `json:"username" bson:"Username"`
+	ProductName string             `json:"product_name" bson:"product_name"`
+	Description string             `json:"description" bson:"description"`
+	Price       float64            `json:"price" bson:"price"`
+	Quantity    int                `json:"quantity" bson:"quantity"`
+	ProductID   primitive.ObjectID `json:"product_id" bson:"product_id"`
+	UserID      primitive.ObjectID `json:"user_id" bson:"user_id"`
+	//image url koymadım. Bunu bir düşün!
+
+}
+
+func getSellerOrdersFromDB(userID string) ([]SellerOrder, error) {
+	// userID boş mu kontrol et
 	if userID == "" {
-		log.Println("Unauthorized - No userID in cookie")
-
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+		return nil, fmt.Errorf("userID is required")
 	}
 
+	// userID'yi ObjectID'ye çevir
 	uid, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
-		log.Printf("Invalid user ID from cookie: %s", userID)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid User ID format!"})
+		return nil, fmt.Errorf("invalid userID format")
 	}
 
+	// Veritabanı bağlantısı
 	client := configs.DB
-	collection := configs.GetCollection(client, "carts")
+	collection := configs.GetCollection(client, "seller-orders")
 
-	log.Printf("Filtering cart items with user_id: %v", uid)
-
-	var cartItems []Cart
-	cursor, err := collection.Find(context.TODO(), bson.M{"user_id": uid})
+	// Kullanıcıya ait sipariş öğelerini filtrele
+	filter := bson.M{"user_id": uid}
+	cursor, err := collection.Find(context.TODO(), filter)
 	if err != nil {
-		log.Printf("Failed to fetch cart items for userID: %v, error: %v", uid, err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch cart items"})
+		return nil, fmt.Errorf("failed to fetch seller orders: %v", err)
 	}
 	defer cursor.Close(context.TODO())
 
-	for cursor.Next(context.TODO()) {
-		var item Cart
-		if err := cursor.Decode(&item); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decode cart item"})
-		}
-		cartItems = append(cartItems, item)
+	// Sipariş öğelerini decode et
+	var sellerOrders []SellerOrder
+	if err := cursor.All(context.TODO(), &sellerOrders); err != nil {
+		return nil, fmt.Errorf("failed to decode seller orders: %v", err)
 	}
 
-	return c.Render("cart", fiber.Map{
-		"CartItems": cartItems,
-	})
+	return sellerOrders, nil
 }
 
-*/
+func getProductsFromDB() ([]Product, error) {
 
-func getCart(c *fiber.Ctx) error {
-	userID := c.Cookies("userID")
-	log.Printf("user id from cookie: %v", userID)
+	client := configs.DB
+	collection := configs.GetCollection(client, "products")
 
-	if userID == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
-	}
-
-	// Kullanıcıya ait sepet öğelerini çek
-	carts, err := getCartsFromDB(userID)
+	cursor, err := collection.Find(nil, bson.M{})
 	if err != nil {
-		log.Printf("Failed to fetch cart items: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch cart items"})
+		return nil, err
+	}
+	defer cursor.Close(nil)
+
+	var products []Product
+	if err := cursor.All(nil, &products); err != nil {
+		return nil, err
 	}
 
-	return c.Render("cart", fiber.Map{
-		"CartItems": carts,
-	})
+	return products, nil
+}
+
+func getSellerProductsFromDB() ([]SellerProduct, error) {
+
+	client := configs.DB
+	collection := configs.GetCollection(client, "seller-products")
+
+	cursor, err := collection.Find(nil, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	var products []SellerProduct
+	if err := cursor.All(context.TODO(), &products); err != nil {
+		return nil, err
+	}
+	return products, nil
+}
+
+func getUsersFromDB() ([]User, error) {
+
+	client := configs.DB
+	collection := configs.GetCollection(client, "users")
+
+	cursor, err := collection.Find(nil, bson.M{})
+	if err != nil {
+		log.Println("Error fetching users:", err)
+		return nil, err
+	}
+	defer cursor.Close(nil)
+
+	var users []User
+	if err := cursor.All(nil, &users); err != nil {
+
+		log.Println("Error decoding users:", err)
+
+		return nil, err
+	}
+
+	log.Println("Fetched users:", users)
+	return users, nil
+}
+
+func getOrdersFromDB() ([]Order, error) {
+
+	client := configs.DB
+	collection := configs.GetCollection(client, "orders")
+
+	cursor, err := collection.Find(nil, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(nil)
+
+	var orders []Order
+	if err := cursor.All(nil, &orders); err != nil {
+		return nil, err
+	}
+
+	return orders, nil
 }
 
 func getUserCart(c *fiber.Ctx) error {
@@ -574,26 +578,6 @@ func addProduct(c *fiber.Ctx) error {
 	}
 
 	return c.Redirect("/my-products")
-}
-
-func logoutHandler(c *fiber.Ctx) error {
-	// 🍪 Çerezleri temizle
-	c.Cookie(&fiber.Cookie{
-		Name:     "userID",
-		Value:    "",
-		Expires:  time.Now().Add(-1 * time.Hour),
-		HTTPOnly: true,
-	})
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "Username",
-		Value:    "",
-		Expires:  time.Now().Add(-1 * time.Hour),
-		HTTPOnly: true,
-	})
-
-	// Kullanıcıyı ana sayfaya yönlendir
-	return c.Redirect("/")
 }
 
 func getSellerOrderFromDB() ([]SellerOrder, error) {
@@ -790,6 +774,8 @@ func main() {
 			"SellerOrder": sellerorder,
 		})
 	})
+
+	//	app.Get("/my-orders", getSellerOrders)  buraya bak bir
 
 	app.Post("/add-products", addProduct)
 
