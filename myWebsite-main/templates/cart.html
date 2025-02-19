@@ -10,6 +10,9 @@
             margin: 0;
             padding: 0;
         }
+        h1{
+            padding: 25px;
+        }
         nav {
             background-color: #0056b3;
             color: white;
@@ -22,19 +25,24 @@
         }
         .cart-container {
             padding: 3%;
+
         }
         .cart-card {
-            border: 1px solid #ccc;
+            border: 3px solid #ccc;
             padding: 10px;
-            margin: 10px;
+            margin: 30px;
             display: inline-block;
-            width: 200px;
+            width: 75%;
+            height:60%;
             text-align: center;
+
         }
         .cart-card img {
-            width: 100%;
+            width: 90%;
             height: auto;
         }
+
+
     </style>
 </head>
 <body>
@@ -59,7 +67,7 @@
 </script>
 
 
-<h1>My Cart</h1>
+<h1>  My Cart</h1>
 <ul id="cart-list"></ul>
 
 <script>
@@ -82,20 +90,27 @@
 
 
 <div class="cart-container">
-    {{ if .Products }}
-    {{ range .Products }}
-    <div class="cart-card">
-        <img src="{{ .ImageURL }}" alt="{{ .Name }}">
-        <h3>{{ .ProductName }}</h3>
-        <p>{{ .ProductDescription }}</p>
-        <p><strong>Stock: {{ .ProductQuantity }}</strong></p>
-        <p><strong>Price: ${{ .ProductPrice }}</strong></p>
+    {{ if .CartItems }}
+    {{ range .CartItems }}
 
-        <form action="/carts" method="POST">  <!-- carts yazdım ama -->
+
+    <div class="cart-card">
+
+            <h3>{{ .Name }}</h3>
+            <p>Price: ${{ .Price }}</p>
+            <p>Quantity: {{ .Quantity }}</p>
+        <p><strong> Total Amount : {{ .Quantity}} {{ .Price}}</strong></p>
+        <p style="color: #004494" ><strong>Ordered by: {{ .Username }}</strong></p>
+
+
+        <form action="/carts" method="POST">
             <input type="hidden" name="name" value="{{ .Name }}">
             <input type="hidden" name="price" value="{{ .Price }}">
             <input type="hidden" name="quantity" value="1">
+            <input type="hidden" name="product_id" value="{{ .ProductID }}">
+
         </form>
+
 
     </div>
     {{ end }}

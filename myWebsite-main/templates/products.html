@@ -10,6 +10,9 @@
       margin: 0;
       padding: 0;
     }
+    h1{
+      margin:30px;
+    }
     nav {
       background-color: #0056b3;
       color: white;
@@ -22,14 +25,18 @@
     }
     .product-container {
       padding: 3%;
+
     }
     .product-card {
-      border: 1px solid #ccc;
+      border: 3px solid #ccc;
       padding: 10px;
-      margin: 10px;
+      margin-left: 20px;
+      margin-right:20px;
       display: inline-block;
-      width: 200px;
       text-align: center;
+      margin-bottom: 3%;
+      width:20%;
+      height:30%;
     }
     .product-card img {
       width: 100%;
@@ -65,7 +72,7 @@
 
 
     let productId = button.getAttribute("data-product-id");
-    console.log("Gönderilen Ürün ID:", productId); // Konsolda ID'yi gör
+    console.log("Gönderilen Ürün ID:", productId);
 
 
     if (!productId) {
@@ -100,22 +107,17 @@
     <p>{{ .Description }}</p>
     <p><strong>Stock: {{ .Quantity }}</strong></p>
     <p><strong>Price: ${{ .Price }}</strong></p>
-      <p><strong>ID: ${{ .ID }}</strong></p>
-
+    <!-- <p><strong>ID: ${{ .ID }}</strong></p>  -->
 
     <form action="/add-to-cart" method="POST">
+
       <input type="hidden" name="name" value="{{ .Name }}">
       <input type="hidden" name="price" value="{{ .Price }}">
       <input type="hidden" name="quantity" value="1">
       <input type="hidden" name="product_id" value="{{.ID}}">
-
-      <!--  <button type="submit">Add To Cart</button>  -->
-      <!--  <button onclick="addToCart('{{ .ID }}')">Add to Cart</button>  -->
-        <!--  <button data-product-id="{{ .ID }}" class="add-to-cart" onclick="addToCart(this)">Add to Cart</button>  -->
-        <button type="submit">Add to Cart</button>
+      <button type="submit">Add to Cart</button>
 
      </form>
-
 
        </div>
        {{ end }}
