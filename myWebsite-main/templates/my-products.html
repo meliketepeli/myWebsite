@@ -9,11 +9,9 @@
             margin: 0;
             padding: 0;
         }
-
-        h1{
-            margin:30px;
+        h1 {
+            margin: 30px;
         }
-
         nav {
             background-color: #0056b3;
             color: white;
@@ -24,7 +22,6 @@
             text-decoration: none;
             margin-right: 30px;
         }
-
         .my-product-container {
             padding: 3%;
         }
@@ -41,11 +38,8 @@
             height: auto;
         }
     </style>
-
 </head>
-
 <body>
-
 
 <nav>
     <a href="/add-products">Add Products</a>
@@ -74,34 +68,12 @@
         <p>{{ .Description }}</p>
         <p><strong>Stock: {{ .Quantity }}</strong></p>
         <p><strong>Price: ${{ .Price }}</strong></p>
-
     </div>
     {{ end }}
     {{ else }}
     <p style="color:red;">Not Found Your Products.</p>
     {{ end }}
 </div>
-
-<!--
-<script>
-    fetch('/my-products')
-        .then(response => response.json())
-        .then(data => {
-            const productsDiv = document.getElementById('products');
-            data.products.forEach(product => {
-                const productDiv = document.createElement('div');
-                productDiv.innerHTML = `
-                        <h2>${product.name}</h2>
-                        <img src="${product.imageURL}" alt="Ürün Resmi">
-                        <p>${product.description}</p>
-                        <p>Price: $${product.price}</p>
-                        <p>Quantity: ${product.quantity}</p>
-                    `;
-                productsDiv.appendChild(productDiv);
-            });
-        });
-</script>   -->
-
 
 </body>
 </html>

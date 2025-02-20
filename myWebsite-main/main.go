@@ -295,6 +295,24 @@ type SellerProduct struct {
 	SellerID    primitive.ObjectID `json:"seller_id" bson:"seller_id"`
 }
 
+func getSellerProductsFromDB() ([]SellerProduct, error) {
+
+	client := configs.DB
+	collection := configs.GetCollection(client, "seller-products")
+
+	cursor, err := collection.Find(nil, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	var products []SellerProduct
+	if err := cursor.All(context.TODO(), &products); err != nil {
+		return nil, err
+	}
+	return products, nil
+}
+
 type User struct {
 	Id       primitive.ObjectID `json:"id" bson:"_id"`
 	Username string             `json:"username" bson:"Username"`
@@ -312,29 +330,15 @@ type Order struct {
 	UserID    primitive.ObjectID `json:"user_id" bson:"user_id"`
 }
 
-/*
-	type SellerOrder struct {
-		Id          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-		Username    string             `json:"username" bson:"Username"`
-		Name        string             `json:"name" bson:"name"`
-		Description string             `json:"description" bson:"description"`
-		Price       float64            `json:"price" bson:"price"`
-		Quantity    int                `json:"quantity" bson:"quantity"`
-
-		//image url koymadım. Bunu bir düşün!
-	}
-*/
 type SellerOrder struct {
 	Id          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	Username    string             `json:"username" bson:"Username"`
-	ProductName string             `json:"product_name" bson:"product_name"`
+	Name        string             `json:"name" bson:"name"`
 	Description string             `json:"description" bson:"description"`
 	Price       float64            `json:"price" bson:"price"`
 	Quantity    int                `json:"quantity" bson:"quantity"`
-	ProductID   primitive.ObjectID `json:"product_id" bson:"product_id"`
-	UserID      primitive.ObjectID `json:"user_id" bson:"user_id"`
-	//image url koymadım. Bunu bir düşün!
 
+	//image url koymadım. Bunu bir düşün!
 }
 
 func getSellerOrdersFromDB(userID string) ([]SellerOrder, error) {
@@ -370,43 +374,112 @@ func getSellerOrdersFromDB(userID string) ([]SellerOrder, error) {
 	return sellerOrders, nil
 }
 
-func getProductsFromDB() ([]Product, error) {
+func addProduct(c *fiber.Ctx) error {
+	// Dosya yükleme işlemi
+	file, err := c.FormFile("image")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No file uploaded"})
+	}
 
+	fileData, err := file.Open()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file"})
+	}
+	defer fileData.Close()
+
+	// GridFS'e dosya yükleme
+	client := configs.DB
+	bucket, err := gridfs.NewBucket(client.Database("myWebsiteAPI"))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create GridFS bucket"})
+	}
+
+	uploadStream, err := bucket.OpenUploadStream(file.Filename)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to open upload stream"})
+	}
+	defer uploadStream.Close()
+
+	if _, err := io.Copy(uploadStream, fileData); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to copy file data"})
+	}
+
+	imageID := uploadStream.FileID.(primitive.ObjectID)
+	imageURL := fmt.Sprintf("/file/%s", imageID.Hex())
+
+	// Form verilerini al
+	name := c.FormValue("name")
+	description := c.FormValue("description")
+	priceStr := c.FormValue("price")
+	quantityStr := c.FormValue("quantity")
+
+	price, err := strconv.ParseFloat(priceStr, 64)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid price value"})
+	}
+
+	quantity, err := strconv.Atoi(quantityStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid quantity value"})
+	}
+
+	// SellerProduct oluştur
+	sellerProduct := SellerProduct{
+		ID:          primitive.NewObjectID().Hex(),
+		Name:        name,
+		Description: description,
+		Price:       price,
+		Quantity:    quantity,
+		ImageURL:    imageURL,
+	}
+
+	// Product oluştur
+	product := Product{
+		ID:          primitive.NewObjectID().Hex(),
+		Name:        name,
+		Description: description,
+		Price:       price,
+		Quantity:    quantity,
+		ImageURL:    imageURL,
+	}
+
+	// Veritabanı bağlantısı
+	client = configs.DB
+
+	// SellerProducts koleksiyonuna ekle
+	sellerCollection := configs.GetCollection(client, "seller-products")
+	_, err = sellerCollection.InsertOne(c.Context(), sellerProduct)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to seller-products"})
+	}
+
+	// Products koleksiyonuna ekle
+	productCollection := configs.GetCollection(client, "products")
+	_, err = productCollection.InsertOne(c.Context(), product)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to products"})
+	}
+
+	return c.Redirect("/my-products")
+}
+
+func getProductsFromDB() ([]Product, error) {
 	client := configs.DB
 	collection := configs.GetCollection(client, "products")
 
-	cursor, err := collection.Find(nil, bson.M{})
+	cursor, err := collection.Find(context.TODO(), bson.M{})
 	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(nil)
-
-	var products []Product
-	if err := cursor.All(nil, &products); err != nil {
-		return nil, err
-	}
-
-	return products, nil
-}
-
-func getSellerProductsFromDB() ([]SellerProduct, error) {
-
-	client := configs.DB
-	collection := configs.GetCollection(client, "seller-products")
-
-	cursor, err := collection.Find(nil, bson.M{})
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch products: %v", err)
 	}
 	defer cursor.Close(context.TODO())
 
-	var products []SellerProduct
+	var products []Product
 	if err := cursor.All(context.TODO(), &products); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode products: %v", err)
 	}
+
 	return products, nil
 }
-
 func getUsersFromDB() ([]User, error) {
 
 	client := configs.DB
@@ -515,71 +588,6 @@ func removeFromCart(c *fiber.Ctx) error {
 	return c.Redirect(fmt.Sprintf("/carts?username=%s", username))
 }
 
-func addProduct(c *fiber.Ctx) error {
-
-	file, err := c.FormFile("image")
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No file uploaded"})
-	}
-
-	fileData, err := file.Open()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file"})
-	}
-	defer fileData.Close()
-
-	client := configs.DB
-	bucket, err := gridfs.NewBucket(client.Database("myWebsiteAPI"))
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create GridFS bucket"})
-	}
-
-	uploadStream, err := bucket.OpenUploadStream(file.Filename)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to open upload stream"})
-	}
-	defer uploadStream.Close()
-
-	if _, err := io.Copy(uploadStream, fileData); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to copy file data"})
-	}
-
-	imageID := uploadStream.FileID.(primitive.ObjectID)
-	imageURL := fmt.Sprintf("/file/%s", imageID.Hex())
-
-	name := c.FormValue("name")
-	description := c.FormValue("description")
-	priceStr := c.FormValue("price")
-	quantityStr := c.FormValue("quantity")
-
-	price, err := strconv.ParseFloat(priceStr, 64)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid price value"})
-	}
-
-	quantity, err := strconv.Atoi(quantityStr)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid quantity value"})
-	}
-
-	product := SellerProduct{
-		ID:          primitive.NewObjectID().Hex(),
-		Name:        name,
-		Description: description,
-		Price:       price,
-		Quantity:    quantity,
-		ImageURL:    imageURL,
-	}
-
-	collection := configs.GetCollection(client, "seller-products")
-	_, err = collection.InsertOne(c.Context(), product)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to database"})
-	}
-
-	return c.Redirect("/my-products")
-}
-
 func getSellerOrderFromDB() ([]SellerOrder, error) {
 
 	client := configs.DB
@@ -650,12 +658,6 @@ func main() {
 
 	})
 
-	app.Get("/add-products", func(c *fiber.Ctx) error {
-
-		return c.Render("add-products", nil)
-
-	})
-
 	app.Post("/login", loginHandler)
 
 	app.Post("/cart", JWTMiddleware(), addToCart)
@@ -664,6 +666,15 @@ func main() {
 	app.Use(AuthMiddleware)
 
 	app.Post("/logout", logoutHandler)
+
+	// bu kısma bakıyorum simdi!!!
+	app.Get("/add-products", func(c *fiber.Ctx) error {
+
+		return c.Render("add-products", nil)
+
+	})
+	//alttakini ekledim
+	app.Post("/add-products", addProduct)
 
 	app.Get("/api/products", func(c *fiber.Ctx) error {
 		products, err := getProductsFromDB()
