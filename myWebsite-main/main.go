@@ -125,7 +125,7 @@ func JWTMiddleware() fiber.Handler {
 	}
 }
 func logoutHandler(c *fiber.Ctx) error {
-	// 🍪 Çerezleri temizle
+
 	c.Cookie(&fiber.Cookie{
 		Name:     "userID",
 		Value:    "",
@@ -140,7 +140,6 @@ func logoutHandler(c *fiber.Ctx) error {
 		HTTPOnly: true,
 	})
 
-	// Kullanıcıyı ana sayfaya yönlendir
 	return c.Redirect("/")
 }
 
@@ -208,7 +207,6 @@ func getCart(c *fiber.Ctx) error {
 	})
 }
 
-// sanki buna gerek yoktu ama emin degilim !
 func addToCart(c *fiber.Ctx) error {
 	userID := c.Cookies("userID")
 	log.Printf("user id from cookie: %v", userID)
@@ -236,8 +234,8 @@ func addToCart(c *fiber.Ctx) error {
 	productCollection := configs.GetCollection(client, "products")
 
 	var product struct {
-		Name  string  `bson:"name"`
-		Price float64 `bson:"price"`
+		Name  string  `json:"name" bson:"name"`
+		Price float64 `json:"price" bson:"price"`
 	}
 	err = productCollection.FindOne(context.TODO(), bson.M{"_id": oid}).Decode(&product)
 	if err != nil {
@@ -285,31 +283,203 @@ type Product struct {
 }
 
 type SellerProduct struct {
-	ID          string             `json:"id" bson:"_id"`
+	ID          primitive.ObjectID `json:"id" bson:"_id"`
 	Name        string             `json:"name" bson:"name"`
 	Description string             `json:"description" bson:"description"`
 	Price       float64            `json:"price" bson:"price"`
 	Quantity    int                `json:"quantity" bson:"quantity"`
 	ImageURL    string             `json:"imageURL" bson:"imageURL"`
 	ProductID   primitive.ObjectID `json:"product_id" bson:"product_id"`
-	SellerID    primitive.ObjectID `json:"seller_id" bson:"seller_id"`
+	UserID      primitive.ObjectID `json:"user_id" bson:"user_id"`
+	// bu aslında seller id ama user id yaptım.
 }
 
-func getSellerProductsFromDB() ([]SellerProduct, error) {
+func getSellerProductsFromDB(userID string) ([]SellerProduct, error) {
+
+	// userID boş mu kontrol et
+	if userID == "" {
+		return nil, fmt.Errorf("userID is required")
+	}
+
+	// userID'yi ObjectID'ye çevir
+	uid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid userID format")
+	}
 
 	client := configs.DB
 	collection := configs.GetCollection(client, "seller-products")
 
-	cursor, err := collection.Find(nil, bson.M{})
+	filter := bson.M{"user_id": uid}
+	cursor, err := collection.Find(context.TODO(), filter)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch product items: %v", err)
 	}
 	defer cursor.Close(context.TODO())
 
 	var products []SellerProduct
 	if err := cursor.All(context.TODO(), &products); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode seller-product items: %v", err)
 	}
+	return products, nil
+}
+
+func getMyProducts(c *fiber.Ctx) error {
+	userID := c.Cookies("userID")
+	log.Printf("user id from cookie: %v", userID)
+
+	if userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	// Sellerın product çek
+	sellerProducts, err := getSellerProductsFromDB(userID)
+	if err != nil {
+		log.Printf("Failed to fetch cart items: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch cart items"})
+	}
+
+	if err != nil {
+		log.Printf("Failed to fetch product items: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch product items"})
+	}
+
+	return c.Render("my-products", fiber.Map{
+		"SellerProducts": sellerProducts,
+	})
+}
+
+func addProduct(c *fiber.Ctx) error {
+	userID := c.Cookies("userID")
+	log.Printf("User ID from cookie: %v", userID)
+
+	if userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	uid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		log.Printf("Invalid user ID format: %s", userID)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid User ID format!"})
+	}
+
+	client := configs.DB
+	userCollection := configs.GetCollection(client, "users")
+
+	var user struct {
+		Role string `json:"role" bson:"Role"`
+	}
+
+	err = userCollection.FindOne(c.Context(), bson.M{"_id": uid}).Decode(&user)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
+	}
+
+	if user.Role != "seller" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Permission denied"})
+	}
+
+	productID := primitive.NewObjectID()
+
+	// Dosya yükleme işlemi
+	file, err := c.FormFile("image")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No file uploaded"})
+	}
+
+	fileData, err := file.Open()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file"})
+	}
+	defer fileData.Close()
+
+	// GridFS'e dosya yükleme
+	bucket, err := gridfs.NewBucket(client.Database("myWebsiteAPI"))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create GridFS bucket"})
+	}
+
+	uploadStream, err := bucket.OpenUploadStream(file.Filename)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to open upload stream"})
+	}
+	defer uploadStream.Close()
+
+	if _, err := io.Copy(uploadStream, fileData); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to copy file data"})
+	}
+
+	imageID := uploadStream.FileID.(primitive.ObjectID)
+	imageURL := fmt.Sprintf("/file/%s", imageID.Hex())
+
+	// Form verilerini al
+	name := c.FormValue("name")
+	description := c.FormValue("description")
+	priceStr := c.FormValue("price")
+	quantityStr := c.FormValue("quantity")
+
+	price, err := strconv.ParseFloat(priceStr, 64)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid price value"})
+	}
+
+	quantity, err := strconv.Atoi(quantityStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid quantity value"})
+	}
+
+	sellerProduct := SellerProduct{
+		ID:          primitive.NewObjectID(),
+		Name:        name,
+		Description: description,
+		Price:       price,
+		Quantity:    quantity,
+		ImageURL:    imageURL,
+		UserID:      uid,
+		ProductID:   productID,
+	}
+
+	product := Product{
+		ID:          productID.Hex(),
+		Name:        name,
+		Description: description,
+		Price:       price,
+		Quantity:    quantity,
+		ImageURL:    imageURL,
+	}
+
+	sellerCollection := configs.GetCollection(client, "seller-products")
+	_, err = sellerCollection.InsertOne(c.Context(), sellerProduct)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to seller-products"})
+	}
+
+	productCollection := configs.GetCollection(client, "products")
+	_, err = productCollection.InsertOne(c.Context(), product)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to products"})
+	}
+
+	getSellerProductsFromDB(uid.Hex())
+
+	return c.Redirect("/my-products")
+}
+
+func getProductsFromDB() ([]Product, error) {
+	client := configs.DB
+	collection := configs.GetCollection(client, "products")
+
+	cursor, err := collection.Find(context.TODO(), bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch products: %v", err)
+	}
+	defer cursor.Close(context.TODO())
+
+	var products []Product
+	if err := cursor.All(context.TODO(), &products); err != nil {
+		return nil, fmt.Errorf("failed to decode products: %v", err)
+	}
+
 	return products, nil
 }
 
@@ -374,112 +544,6 @@ func getSellerOrdersFromDB(userID string) ([]SellerOrder, error) {
 	return sellerOrders, nil
 }
 
-func addProduct(c *fiber.Ctx) error {
-	// Dosya yükleme işlemi
-	file, err := c.FormFile("image")
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No file uploaded"})
-	}
-
-	fileData, err := file.Open()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file"})
-	}
-	defer fileData.Close()
-
-	// GridFS'e dosya yükleme
-	client := configs.DB
-	bucket, err := gridfs.NewBucket(client.Database("myWebsiteAPI"))
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create GridFS bucket"})
-	}
-
-	uploadStream, err := bucket.OpenUploadStream(file.Filename)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to open upload stream"})
-	}
-	defer uploadStream.Close()
-
-	if _, err := io.Copy(uploadStream, fileData); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to copy file data"})
-	}
-
-	imageID := uploadStream.FileID.(primitive.ObjectID)
-	imageURL := fmt.Sprintf("/file/%s", imageID.Hex())
-
-	// Form verilerini al
-	name := c.FormValue("name")
-	description := c.FormValue("description")
-	priceStr := c.FormValue("price")
-	quantityStr := c.FormValue("quantity")
-
-	price, err := strconv.ParseFloat(priceStr, 64)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid price value"})
-	}
-
-	quantity, err := strconv.Atoi(quantityStr)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid quantity value"})
-	}
-
-	// SellerProduct oluştur
-	sellerProduct := SellerProduct{
-		ID:          primitive.NewObjectID().Hex(),
-		Name:        name,
-		Description: description,
-		Price:       price,
-		Quantity:    quantity,
-		ImageURL:    imageURL,
-	}
-
-	// Product oluştur
-	product := Product{
-		ID:          primitive.NewObjectID().Hex(),
-		Name:        name,
-		Description: description,
-		Price:       price,
-		Quantity:    quantity,
-		ImageURL:    imageURL,
-	}
-
-	// Veritabanı bağlantısı
-	client = configs.DB
-
-	// SellerProducts koleksiyonuna ekle
-	sellerCollection := configs.GetCollection(client, "seller-products")
-	_, err = sellerCollection.InsertOne(c.Context(), sellerProduct)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to seller-products"})
-	}
-
-	// Products koleksiyonuna ekle
-	productCollection := configs.GetCollection(client, "products")
-	_, err = productCollection.InsertOne(c.Context(), product)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to products"})
-	}
-
-	return c.Redirect("/my-products")
-}
-
-func getProductsFromDB() ([]Product, error) {
-	client := configs.DB
-	collection := configs.GetCollection(client, "products")
-
-	cursor, err := collection.Find(context.TODO(), bson.M{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch products: %v", err)
-	}
-	defer cursor.Close(context.TODO())
-
-	var products []Product
-	if err := cursor.All(context.TODO(), &products); err != nil {
-		return nil, fmt.Errorf("failed to decode products: %v", err)
-	}
-
-	return products, nil
-}
 func getUsersFromDB() ([]User, error) {
 
 	client := configs.DB
@@ -698,12 +762,17 @@ func main() {
 		})
 	})
 
+	/*
+		app.Get("/my-products", func(c *fiber.Ctx) error {
+			products, err := getSellerProductsFromDB() // bu kısım sıkıntılı
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch products"})
+			}
+			return c.Render("my-products", fiber.Map{"SellerProducts": products})
+		}) */
+
 	app.Get("/my-products", func(c *fiber.Ctx) error {
-		products, err := getSellerProductsFromDB()
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch products"})
-		}
-		return c.Render("my-products", fiber.Map{"SellerProducts": products})
+		return getMyProducts(c)
 	})
 
 	app.Get("/api/users", func(c *fiber.Ctx) error {
@@ -731,6 +800,7 @@ func main() {
 	app.Get("/carts", func(c *fiber.Ctx) error {
 		return getCart(c)
 	})
+
 	/*
 		app.Get("/api/carts", func(c *fiber.Ctx) error {
 			cart, err := getCartsFromDB()
