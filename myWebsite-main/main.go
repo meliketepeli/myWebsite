@@ -348,7 +348,6 @@ func getMyProducts(c *fiber.Ctx) error {
 		"SellerProducts": sellerProducts,
 	})
 }
-
 func addProduct(c *fiber.Ctx) error {
 	userID := c.Cookies("userID")
 	log.Printf("User ID from cookie: %v", userID)
@@ -379,6 +378,7 @@ func addProduct(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Permission denied"})
 	}
 
+	// ✅ Ürün için ObjectID oluştur
 	productID := primitive.NewObjectID()
 
 	// Dosya yükleme işlemi
@@ -428,6 +428,7 @@ func addProduct(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid quantity value"})
 	}
 
+	// ✅ SellerProducts koleksiyonuna eklenmek üzere nesne oluştur
 	sellerProduct := SellerProduct{
 		ID:          primitive.NewObjectID(),
 		Name:        name,
@@ -436,30 +437,34 @@ func addProduct(c *fiber.Ctx) error {
 		Quantity:    quantity,
 		ImageURL:    imageURL,
 		UserID:      uid,
-		ProductID:   productID,
+		ProductID:   productID, // ✅ SellerProducts içinde product_id olarak saklanacak
 	}
 
-	product := Product{
-		ID:          productID.Hex(),
-		Name:        name,
-		Description: description,
-		Price:       price,
-		Quantity:    quantity,
-		ImageURL:    imageURL,
+	// ✅ Products koleksiyonuna eklenmek üzere nesne oluştur (_id = productID)
+	product := bson.M{
+		"_id":         productID, // ✅ Aynı `productID` kullanılıyor
+		"name":        name,
+		"description": description,
+		"price":       price,
+		"quantity":    quantity,
+		"imageURL":    imageURL,
 	}
 
+	// ✅ SellerProducts koleksiyonuna ekle
 	sellerCollection := configs.GetCollection(client, "seller-products")
 	_, err = sellerCollection.InsertOne(c.Context(), sellerProduct)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to seller-products"})
 	}
 
+	// ✅ Products koleksiyonuna ekle
 	productCollection := configs.GetCollection(client, "products")
 	_, err = productCollection.InsertOne(c.Context(), product)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add product to products"})
 	}
 
+	// ✅ `getSellerProductsFromDB` çağrısına string parametre ekle
 	getSellerProductsFromDB(uid.Hex())
 
 	return c.Redirect("/my-products")
