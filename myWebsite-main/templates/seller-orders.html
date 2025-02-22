@@ -63,11 +63,12 @@
     {{ if .SellerOrder }}
     {{ range .SellerOrder }}
     <div class="my-order-card">
-     <p>   {{ .Username }}</p>
-        <p><strong>{{ .ProductName }}</strong></p>
+
+        <p><strong>{{ .Name }}</strong></p>
         <p>{{ .Description }}</p>
         <p>Stock: {{ .Quantity }}</p>
         <p>Price: ${{ .Price }}</p>
+        <p style="color: #004494" ><strong>Ordered by: {{ .Username }}</strong></p>
 
     </div>
     {{ end }}

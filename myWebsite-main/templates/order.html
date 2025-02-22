@@ -1,11 +1,10 @@
 {{ define "order" }}
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orders</title>
+    <title>Seller Orders</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -13,89 +12,58 @@
             padding: 0;
             background-color: #f4f4f4;
         }
-        nav {
-            background-color: #0056b3;
-            color: white;
-            padding: 25px;
-        }
-        nav a {
-            color: white;
-            text-decoration: none;
-            margin-right: 30px;
-        }
-        .orders-container {
-            width: 80%;
-            margin: 30px auto;
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
             background: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        .order-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 15px;
-            border-bottom: 1px solid #ddd;
-        }
-        .order-item:last-child {
-            border-bottom: none;
-        }
-        .order-details {
-            display: flex;
-            flex-direction: column;
-        }
-        .empty-message {
+        h2 {
             text-align: center;
-            font-size: 18px;
-            color: #888;
-            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
         }
     </style>
 </head>
 <body>
-
-<nav>
-    <a href="/products">Products</a>
-    <a href="/carts">Cart</a>
-    <a href="#" onclick="logout()">Logout</a>
-</nav>
-
-
-<script>
-    function logout() {
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/logout';
-
-        document.body.appendChild(form);
-
-        form.submit();
-    }
-</script>
+<div class="container">
+    <h2>Seller Orders</h2>
+    <table>
+        <tr>
+            <th>Username</th>
+            <th>Product Name</th>
+            <th>Price</th>
+            <th>Quantity</th>
+            <th>Total Amount</th>
+        </tr>
+        {{ range .SellerOrder }}
+        <tr>
+            <td>{{ .Username }}</td>
+            <td>{{ .Name }}</td>
+            <td>${{ .Price }}</td>
+            <td>{{ .Quantity }}</td>
+            <td>${{ .Total }}</td>
 
 
-<div class="orders-container">
-    <h2>Your Orders</h2>
-
-    {{ if .Orders }}
-    {{ range .Orders }}
-    <div class="order-item">
-        <div class="order-details">
-            <h3>{{ .Name }}</h3>
-            <p>Price: ${{ .Price }}</p>
-            <p>Quantity: {{ .Quantity }}</p>
-            <p style="color: #004494" ><strong>Ordered by: {{ .Username }}</strong></p>
-
-        </div>
-    </div>
-    {{ end }}
-    {{ else }}
-    <p class="empty-message">You have no orders yet.</p>
-    {{ end }}
-
+        </tr>
+        {{ end }}
+    </table>
 </div>
-
 </body>
 </html>
-
 {{ end }}

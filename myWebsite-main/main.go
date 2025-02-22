@@ -151,6 +151,7 @@ type Cart struct {
 	Quantity  int                `json:"quantity" bson:"quantity,omitempty"`
 	ProductID primitive.ObjectID `json:"product_id" bson:"product_id"`
 	UserID    primitive.ObjectID `json:"user_id" bson:"user_id"`
+
 	// image url de olsa guzel olur ama image url sıkıntı biraz
 }
 
@@ -231,11 +232,14 @@ func addToCart(c *fiber.Ctx) error {
 
 	client := configs.DB
 	collection := configs.GetCollection(client, "carts")
+	cartsCollection := configs.GetCollection(client, "carts")
 	productCollection := configs.GetCollection(client, "products")
 
 	var product struct {
-		Name  string  `json:"name" bson:"name"`
-		Price float64 `json:"price" bson:"price"`
+		Name     string  `json:"name" bson:"name"`
+		Price    float64 `json:"price" bson:"price"`
+		SellerID string  `json:"sellerId" bson:"sellerId"` // SellerID'yi al
+
 	}
 	err = productCollection.FindOne(context.TODO(), bson.M{"_id": oid}).Decode(&product)
 	if err != nil {
@@ -264,10 +268,46 @@ func addToCart(c *fiber.Ctx) error {
 			Price:     product.Price,
 			ProductID: oid,
 		}
-		_, err = collection.InsertOne(context.TODO(), newCartItem)
+		/*	_, err = collection.InsertOne(context.TODO(), newCartItem)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add item to cart"})
+			} */
+		_, err = cartsCollection.InsertOne(context.TODO(), newCartItem)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add item to cart"})
 		}
+	}
+
+	// Siparişi `orders` koleksiyonuna ekle
+	order := Order{
+		Id:        primitive.NewObjectID(),
+		Username:  c.Cookies("Username"),
+		Name:      product.Name,
+		Price:     product.Price,
+		Quantity:  1, // Sepete eklenen miktar
+		ProductID: oid,
+		UserID:    uid,
+	}
+	ordersCollection := configs.GetCollection(client, "orders")
+	_, err = ordersCollection.InsertOne(context.TODO(), order)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add order"})
+	}
+
+	// SellerOrder'ı `seller-orders` koleksiyonuna ekle
+	sellerOrder := SellerOrder{
+		Id:        primitive.NewObjectID(),
+		Username:  c.Cookies("Username"),
+		Name:      product.Name,
+		Price:     product.Price,
+		Quantity:  1,
+		ProductID: oid,
+		UserID:    uid,
+	}
+	sellerOrdersCollection := configs.GetCollection(client, "seller-orders")
+	_, err = sellerOrdersCollection.InsertOne(context.TODO(), sellerOrder)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add seller order"})
 	}
 
 	return c.Redirect("/carts?id=" + userID)
@@ -280,6 +320,8 @@ type Product struct {
 	Price       float64 `json:"price" bson:"price"`
 	Quantity    int     `json:"quantity" bson:"quantity"`
 	ImageURL    string  `json:"imageURL" bson:"imageURL"`
+	SellerID    string  `json:"sellerId" bson:"sellerId"`
+	//seller  id ekledim.
 }
 
 type SellerProduct struct {
@@ -448,6 +490,8 @@ func addProduct(c *fiber.Ctx) error {
 		"price":       price,
 		"quantity":    quantity,
 		"imageURL":    imageURL,
+		"sellerId":    userID, // ✅ Seller ID olarak userID ekleniyor
+
 	}
 
 	// ✅ SellerProducts koleksiyonuna ekle
@@ -512,41 +556,9 @@ type SellerOrder struct {
 	Description string             `json:"description" bson:"description"`
 	Price       float64            `json:"price" bson:"price"`
 	Quantity    int                `json:"quantity" bson:"quantity"`
+	UserID      primitive.ObjectID `json:"user_id" bson:"user_id"`
+	ProductID   primitive.ObjectID `json:"product_id" bson:"product_id"` // ProductID alanını ekleyin
 
-	//image url koymadım. Bunu bir düşün!
-}
-
-func getSellerOrdersFromDB(userID string) ([]SellerOrder, error) {
-	// userID boş mu kontrol et
-	if userID == "" {
-		return nil, fmt.Errorf("userID is required")
-	}
-
-	// userID'yi ObjectID'ye çevir
-	uid, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid userID format")
-	}
-
-	// Veritabanı bağlantısı
-	client := configs.DB
-	collection := configs.GetCollection(client, "seller-orders")
-
-	// Kullanıcıya ait sipariş öğelerini filtrele
-	filter := bson.M{"user_id": uid}
-	cursor, err := collection.Find(context.TODO(), filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch seller orders: %v", err)
-	}
-	defer cursor.Close(context.TODO())
-
-	// Sipariş öğelerini decode et
-	var sellerOrders []SellerOrder
-	if err := cursor.All(context.TODO(), &sellerOrders); err != nil {
-		return nil, fmt.Errorf("failed to decode seller orders: %v", err)
-	}
-
-	return sellerOrders, nil
 }
 
 func getUsersFromDB() ([]User, error) {
@@ -571,6 +583,210 @@ func getUsersFromDB() ([]User, error) {
 
 	log.Println("Fetched users:", users)
 	return users, nil
+}
+
+/*
+	func getSellerOrdersFromDB(c *fiber.Ctx) error {
+		// Kullanıcıyı al
+		username := c.Locals("username").(string)
+
+		// Kullanıcıyı veritabanından çek
+		client := configs.DB
+		usersCollection := configs.GetCollection(client, "users")
+
+		var seller User
+		err := usersCollection.FindOne(context.TODO(), bson.M{"username": username, "role": "seller"}).Decode(&seller)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Seller not found"})
+		}
+
+		// Kullanıcı seller ise, ona ait ürünleri getir
+		productsCollection := configs.GetCollection(client, "products")
+		cursor, err := productsCollection.Find(context.TODO(), bson.M{"seller_id": seller.Id})
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch seller's products"})
+		}
+		defer cursor.Close(context.TODO())
+
+		var sellerProducts []Product
+		if err := cursor.All(context.TODO(), &sellerProducts); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decode products"})
+		}
+
+		// Ürün ID'leri listesi oluştur
+		var productIDs []primitive.ObjectID
+		for _, product := range sellerProducts {
+			productIDs = append(productIDs, product.ID)
+		}
+
+		// Seller'a ait ürünlerden siparişleri getir
+		ordersCollection := configs.GetCollection(client, "orders")
+		filter := bson.M{"product_id": bson.M{"$in": productIDs}}
+		orderCursor, err := ordersCollection.Find(context.TODO(), filter)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch orders"})
+		}
+		defer orderCursor.Close(context.TODO())
+
+		var sellerOrders []SellerOrder
+		for orderCursor.Next(context.TODO()) {
+			var order Order
+			if err := orderCursor.Decode(&order); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decode orders"})
+			}
+
+			// SellerOrder nesnesine dönüştürme
+			sellerOrders = append(sellerOrders, SellerOrder{
+				Id:       order.Id,
+				Username: order.Username,
+				Name:     order.Name,
+				Price:    order.Price,
+				Quantity: order.Quantity,
+			})
+		}
+
+		// HTML sayfasına siparişleri render et
+		return c.Render("order", fiber.Map{
+			"SellerOrder": sellerOrders,
+		})
+	}
+*/
+/*
+func getSellerOrdersFromDB(c *fiber.Ctx) error {
+	// Kullanıcıyı al
+	username := c.Locals("username").(string)
+
+	// Kullanıcıyı veritabanından çek
+	client := configs.DB
+	usersCollection := configs.GetCollection(client, "users")
+
+	var seller User
+	err := usersCollection.FindOne(context.TODO(), bson.M{"username": username, "role": "seller"}).Decode(&seller)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Seller not found"})
+	}
+
+	// Seller'a ait ürünleri al
+	productsCollection := configs.GetCollection(client, "products")
+	cursor, err := productsCollection.Find(context.TODO(), bson.M{"seller_id": seller.Id})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch seller's products"})
+	}
+	defer cursor.Close(context.TODO())
+
+	var sellerProducts []Product
+	if err := cursor.All(context.TODO(), &sellerProducts); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decode products"})
+	}
+
+	// Ürün ID'leri listesi oluştur
+	var productIDs []primitive.ObjectID
+	for _, product := range sellerProducts {
+		productIDs = append(productIDs, product.ID)
+	}
+
+	// Siparişleri getir
+	ordersCollection := configs.GetCollection(client, "orders")
+	filter := bson.M{"product_id": bson.M{"$in": productIDs}}
+	orderCursor, err := ordersCollection.Find(context.TODO(), filter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch orders"})
+	}
+	defer orderCursor.Close(context.TODO())
+
+	var sellerOrders []SellerOrder
+	for orderCursor.Next(context.TODO()) {
+		var order Order
+		if err := orderCursor.Decode(&order); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decode orders"})
+		}
+
+		// SellerOrder nesnesine dönüştürme
+		sellerOrders = append(sellerOrders, SellerOrder{
+			Id:       order.Id,
+			Username: order.Username, // Siparişi veren kullanıcı
+			Name:     order.Name,
+			Price:    order.Price,
+			Quantity: order.Quantity,
+		})
+	}
+
+	// HTML sayfasına siparişleri render et
+	return c.Render("order", fiber.Map{
+		"SellerOrder": sellerOrders,
+	})
+}
+
+*/
+
+func getSellerOrdersFromDB(c *fiber.Ctx) error {
+	// Kullanıcıyı al
+	username := c.Locals("username").(string)
+
+	// Kullanıcıyı veritabanından çek
+	client := configs.DB
+	usersCollection := configs.GetCollection(client, "users")
+
+	var seller User
+	err := usersCollection.FindOne(context.TODO(), bson.M{"username": username, "role": "seller"}).Decode(&seller)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Seller not found"})
+	}
+
+	// Seller'a ait ürünleri al
+	productsCollection := configs.GetCollection(client, "products")
+	cursor, err := productsCollection.Find(context.TODO(), bson.M{"seller_id": seller.Id})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch seller's products"})
+	}
+	defer cursor.Close(context.TODO())
+
+	var sellerProducts []Product
+	if err := cursor.All(context.TODO(), &sellerProducts); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decode products"})
+	}
+
+	// Ürün ID'leri listesi oluştur
+	var productIDs []primitive.ObjectID
+	for _, product := range sellerProducts {
+		oid, err := primitive.ObjectIDFromHex(product.ID) // product.ID'yi primitive.ObjectID'ye çevirin
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Invalid product ID format"})
+		}
+		productIDs = append(productIDs, oid)
+	}
+
+	// Siparişleri getir
+	ordersCollection := configs.GetCollection(client, "orders")
+	filter := bson.M{"product_id": bson.M{"$in": productIDs}}
+	orderCursor, err := ordersCollection.Find(context.TODO(), filter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch orders"})
+	}
+	defer orderCursor.Close(context.TODO())
+
+	var sellerOrders []SellerOrder
+	for orderCursor.Next(context.TODO()) {
+		var order Order
+		if err := orderCursor.Decode(&order); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decode orders"})
+		}
+
+		// SellerOrder nesnesine dönüştürme
+		sellerOrders = append(sellerOrders, SellerOrder{
+			Id:        order.Id,
+			Username:  order.Username,
+			Name:      order.Name,
+			Price:     order.Price,
+			Quantity:  order.Quantity,
+			ProductID: order.ProductID,
+		})
+	}
+
+	// HTML sayfasına siparişleri render et
+	return c.Render("order", fiber.Map{
+		"SellerOrder": sellerOrders,
+	})
 }
 
 func getOrdersFromDB() ([]Order, error) {
@@ -861,7 +1077,7 @@ func main() {
 		})
 	})
 
-	//	app.Get("/my-orders", getSellerOrders)  buraya bak bir
+	app.Get("/my-orders", getSellerOrdersFromDB)
 
 	app.Post("/add-products", addProduct)
 
