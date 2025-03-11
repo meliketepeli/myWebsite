@@ -1,0 +1,106 @@
+{{ define "cart" }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Cart</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            padding: 30px;
+        }
+        nav {
+            background-color: #0056b3;
+            color: white;
+            padding: 25px;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 30px;
+        }
+        .cart-container {
+            padding: 3%;
+        }
+        .cart-card {
+            border: 3px solid #ccc;
+            padding: 10px;
+            margin: 30px;
+            display: inline-block;
+            width: 75%;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+<nav>
+    <a id="productsLink" href="/products">Products</a>
+    <a id="cartLink" href="/carts">My Cart</a>
+    <a href="#" onclick="logout()">Logout</a>
+</nav>
+
+<script>
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    const userID = getCookie("userID");
+    const role = getCookie("role");
+
+    // Kullanıcının ID'sini URL'ye ekle
+    if (userID) {
+        document.getElementById("productsLink").href = `/products?id=${userID}`;
+        document.getElementById("cartLink").href = `/carts?id=${userID}`;   
+     }
+
+    function logout() {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout';
+        document.body.appendChild(form);
+        form.submit();
+    }
+</script>
+
+<h1>My Cart</h1>
+
+<div class="cart-container">
+    {{ if .CartItems }}
+    {{ range .CartItems }}
+    <div class="cart-card">
+        <h3>{{ .Name }}</h3>
+        <p>Price: ${{ .Price }}</p>
+        <p>Quantity: {{ .Quantity }}</p>
+        <p><strong>Total Amount: $<span class="total-amount">{{ .Price }}</span></strong></p>
+    </div>
+    {{ end }}
+    {{ else }}
+    <p>No products found in this cart.</p>
+    {{ end }}
+</div>
+
+<script>
+    window.onload = function() {
+        let cartItems = document.querySelectorAll(".cart-card");
+
+        cartItems.forEach(function(cartItem) {
+            let price = parseFloat(cartItem.querySelector("p:nth-child(2)").textContent.replace("Price: $", ""));
+            let quantity = parseInt(cartItem.querySelector("p:nth-child(3)").textContent.replace("Quantity: ", ""));
+            let totalAmount = price * quantity;
+            cartItem.querySelector(".total-amount").textContent = totalAmount.toFixed(2);
+        });
+    };
+</script>
+
+</body>
+</html>
+{{ end }}

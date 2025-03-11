@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Products</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            margin: 30px;
+        }
+        nav {
+            background-color: #0056b3;
+            color: white;
+            padding: 25px;
+        }
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 30px;
+        }
+        .my-product-container {
+            padding: 3%;
+        }
+        .my-product-card {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px;
+            display: inline-block;
+            width: 200px;
+            text-align: center;
+        }
+        .my-product-card img {
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+<!-- 🔹 Navbar (Dinamik) -->
+<nav>
+    <a id="addProductsLink" href="/add-products">Add Products</a>
+    <a id="myOrdersLink" href="/my-orders">My Orders</a>
+    <a href="#" onclick="logout()">Logout</a>
+</nav>
+
+<script>
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    const userID = getCookie("userID");
+    const role = getCookie("role");
+
+    // Kullanıcı giriş yaptıysa, userID'yi linklere ekle
+    if (userID) {
+        document.getElementById("addProductsLink").href = `/add-products?id=${userID}`;
+        document.getElementById("myOrdersLink").href = `/my-orders?id=${userID}`;
+    }
+
+    function logout() {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout';
+        document.body.appendChild(form);
+        form.submit();
+    }
+</script>
+
+<h1>My Products</h1>
+
+{{ if .SellerProducts }}
+    
+    <div class="my-product-container">
+        {{ range .SellerProducts }}
+        <div class="my-product-card">
+            <img src="{{ .ImageURL }}" alt="{{ .Name }}">
+            <h3>{{ .Name }}</h3>
+            <p>{{ .Description }}</p>
+            <p><strong>Stock: {{ .Quantity }}</strong></p>
+            <p><strong>Price: ${{ .Price }}</strong></p>
+        </div>
+        {{ end }}
+    </div>
+{{ else }}
+    <p style="color:red;">❌ Not Found Your Products.</p>
+{{ end }}
+
+</body>
+</html>
