@@ -38,14 +38,14 @@ go mod tidy
 - configs klasöründe yer alan ayarları kendi MongoDB URI adresine göre güncelleyin.
 - products isimli bir koleksiyon oluşturun.
 - Örnek ürün verisi:
-{
-  "_id": "1",
-  "name": "Laptop",
-  "description": "Yüksek performanslı dizüstü bilgisayar",
-  "price": 15000,
-  "quantity": 10,
-  "imageURL": "https://example.com/laptop.png"
-}
+- {
+-   "_id": "1",
+-   "name": "Laptop",
+-   "description": "Yüksek performanslı dizüstü bilgisayar",
+-   "price": 15000,
+-   "quantity": 10,
+-   "imageURL": "https://example.com/laptop.png"
+- }
 
 4. Uygulamayı çalıştırma
 ```
