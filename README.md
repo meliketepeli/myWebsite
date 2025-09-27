@@ -34,10 +34,10 @@ cd myWebsite
 ```
 go mod tidy
 ```
-3. MongoDB bağlantısının ayarlanması
-configs klasöründe yer alan ayarları kendi MongoDB URI adresine göre güncelleyin.
-products isimli bir koleksiyon oluşturun.
-Örnek ürün verisi:
+3. MongoDB bağlantısının ayarlanması 
+- configs klasöründe yer alan ayarları kendi MongoDB URI adresine göre güncelleyin.
+- products isimli bir koleksiyon oluşturun.
+- Örnek ürün verisi:
 {
   "_id": "1",
   "name": "Laptop",
